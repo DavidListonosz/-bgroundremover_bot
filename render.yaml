@@ -1,23 +1,19 @@
 services:
-  # Веб-сервис для бота
   - type: web
     name: bg-remover-bot
     env: python
-    region: frankfurt  # Можно изменить на oregon, singapore и т.д.
+    region: frankfurt
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     
-    # Переменные окружения
     envVars:
       - key: TELEGRAM_TOKEN
-        sync: false  # Не синхронизируется с GitHub, задается вручную
+        sync: false 
       
       - key: PYTHON_VERSION
         value: 3.11.0
     
-    # Health check (опционально)
     healthCheckPath: /
     
-    # Авто-деплой при пуше в main
     autoDeploy: true
