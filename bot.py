@@ -27,13 +27,21 @@ MAX_IMAGE_SIZE = 1920  # Максимальный размер стороны и
 user_last_request = defaultdict(float)
 total_processed = 0
 
-# Инициализация легковесной модели для людей (12 MB вместо 176 MB)
-try:
-    session = new_session("u2net_human_seg")
-    logger.info("✅ Модель u2net_human_seg загружена")
-except Exception as e:
-    logger.warning(f"⚠️ Не удалось загрузить u2net_human_seg, используем стандартную: {e}")
-    session = new_session("u2net")
+# Модель будет загружена позже (после запуска HTTP сервера)
+session = None
+
+def get_session():
+    """Ленивая загрузка модели - только когда нужна"""
+    global session
+    if session is None:
+        logger.info("📥 Загружаю AI модель...")
+        try:
+            session = new_session("u2net_human_seg")
+            logger.info("✅ Модель u2net_human_seg загружена")
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось загрузить u2net_human_seg, используем стандартную: {e}")
+            session = new_session("u2net")
+    return session
 
 
 def resize_if_large(image: Image.Image, max_size: int = MAX_IMAGE_SIZE) -> Image.Image:
@@ -152,7 +160,9 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text("✨ *Удаляю фон... (это может занять 10-30 сек)*", parse_mode='Markdown')
         start_time = time.time()
         
-        output_image = remove(input_image, session=session)
+        # Получаем сессию (модель загрузится при первом вызове)
+        current_session = get_session()
+        output_image = remove(input_image, session=current_session)
         
         processing_time = time.time() - start_time
         logger.info(f"⚡ Обработка заняла {processing_time:.1f} секунд")
@@ -231,14 +241,21 @@ def start_http_server():
 
 def main():
     """Запуск бота"""
+    logger.info("🚀 Запуск бота...")
+    logger.info(f"📍 TELEGRAM_TOKEN установлен: {bool(TELEGRAM_TOKEN)}")
+    
     if not TELEGRAM_TOKEN:
         logger.error("❌ TELEGRAM_TOKEN не установлен! Добавь его в переменные окружения.")
+        # Всё равно запускаем HTTP сервер чтобы Render видел порт
+        start_http_server()
         return
     
+    logger.info("🌐 Запуск HTTP сервера...")
     # Запускаем HTTP сервер в отдельном потоке (для Render)
     http_thread = threading.Thread(target=start_http_server, daemon=True)
     http_thread.start()
     
+    logger.info("🔧 Создание приложения...")
     # Создаем приложение
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
