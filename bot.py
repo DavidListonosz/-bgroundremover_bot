@@ -2,7 +2,9 @@ import os
 import io
 import time
 import logging
+import threading
 from collections import defaultdict
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from rembg import remove, new_session
@@ -206,11 +208,36 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} вызвал ошибку {context.error}")
 
 
+class HealthHandler(BaseHTTPRequestHandler):
+    """Простой HTTP handler для health check"""
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    
+    def log_message(self, format, *args):
+        # Отключаем логи HTTP запросов
+        pass
+
+
+def start_http_server():
+    """Запускает фейковый HTTP сервер для Render"""
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logger.info(f"🌐 HTTP server started on port {port}")
+    server.serve_forever()
+
+
 def main():
     """Запуск бота"""
     if not TELEGRAM_TOKEN:
         logger.error("❌ TELEGRAM_TOKEN не установлен! Добавь его в переменные окружения.")
         return
+    
+    # Запускаем HTTP сервер в отдельном потоке (для Render)
+    http_thread = threading.Thread(target=start_http_server, daemon=True)
+    http_thread.start()
     
     # Создаем приложение
     application = Application.builder().token(TELEGRAM_TOKEN).build()
